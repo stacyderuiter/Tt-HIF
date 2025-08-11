@@ -90,7 +90,8 @@ theme_set(theme_minimal(base_size = 12))
 HIF_data <- read_xlsx('data/updated_data.xlsx',
                       .name_repair = 'unique_quiet') |>
   mutate(animal = factor(animal),
-         day = factor(interaction(animal, date, drop = TRUE)))
+         day = factor(interaction(animal, date, drop = TRUE)),
+         is_male = if_else(sex == "M", 1,0))
 ```
 
 # HIF Model
@@ -107,7 +108,8 @@ HIF_model <- gam(oxygen_cons ~
                    s(body_mass, k = 4, bs = "ts") +
                    s(age, k = 4, bs = "ts") + 
                    # other predictor(s)
-                   sex + 
+                   # treat sex as logical 0/1 for convenience later when predicting
+                   is_male + 
                    s(pool_temp, k = 4, bs = "ts") +
                    # random effects
                    s(animal, bs = "re") + 
@@ -318,7 +320,7 @@ predicted_AUC <- data.frame(minutes = mmeans$x,
 max(predicted_AUC$AUC)
 ```
 
-The total at 130 minutes is: `r max(predicted_AUC$AUC)`. Below the cumulative sums are shown:
+The total at 133 minutes is: `r max(predicted_AUC$AUC)`. Below the cumulative sums are shown:
 
 ```{r}
 #| label: cum-auc
@@ -328,7 +330,89 @@ ggplot(predicted_AUC,
   geom_path()
 ```
 
-To compute this quantity with uncertainty, we would probably employ a parametric bootstrap (not done yet).
+##### Uncertainty Estimation
+To compute this quantity with uncertainty, we could probably employ a parametric bootstrap.
+
+First we need a function that takes a fitted model and from it computes the total AUC for 133 minutes:
+
+```{r}
+compute_auc <- function(predicted_smooth, x = mmeans$x){
+  AUC = cumtrapz(x = x,
+                 y = predicted_smooth)
+  total_AUC <- max(AUC)
+  return(total_AUC)
+}
+```
+
+Now, we use the function `gratia::simulate()` 
+
+```{r}
+nsim <- 10000
+set.seed(14)
+
+# draws of parameter estimates from the posterior
+post_params <- gam.mh(HIF_model, ns = nsim*2, burn = 2000, thin = 2)$bs
+# yields matrix with cols = model params and rows = sim #s
+
+# get linear predictor matrix for "mm data"
+mm_const <- attr(x = mmeans, which = "constant.values") |> 
+  data.frame()
+mm_df <- expand_grid(mm_const,
+                     exact = unique(mmeans$x)) 
+
+mm_lpmat <- predict(HIF_model,
+        newdata = mm_df,
+        type="lpmatrix",
+        exclude = c("s(animal)", "s(day)"),
+        newdata.guaranteed = TRUE)
+
+# get predicted vo2 values (each col is one sim)
+vo2_curve <- mm_lpmat %*% t(post_params) ## posterior curve samples
+
+vo2_totals <- apply(vo2_curve, 
+                    MARGIN = 2,
+                    FUN = compute_auc)
+
+# as percent, assuming BMR is constant
+BMR <- 1051.2 # L O2 in one day
+BMR_133 <- 97.1
+
+HIF_133 <- vo2_totals - BMR_133
+daily_HIF <- HIF_133 / mm_const$percentdailytotal
+daily_HIF_percent <- (daily_HIF / BMR) * 100
+
+```
+
+Histogram of simulation results:
+
+```{r}
+gf_histogram(~vo2_totals) |>
+  gf_labs(x = "Liters Oxygen Consumed (over 133 minutes)",
+          y = "Number of Simulations")
+```
+
+```{r}
+gf_histogram(~daily_HIF_percent) |>
+  gf_labs(x = "HIF (percent of daily BMR)",
+          y = "Number of Simulations")
+```
+
+Based on the simulations, the mean HIF during the 133 minutes and also as a percent of the BMR over a full day are *higher* than the estimates based on the data (showing in Figure 1, computed based on the marginal mean model predictions). One reason for the difference may be that the way that individual and day are treated is slightly different in the two cases. By analogy to other resampling/simulation-based approaches the standard errors obtained here could still be appropriate estimates (and better than showing no uncertainty at all).
+
+
+```{r}
+vo2_se <- round(sd(vo2_totals), digits = 2)
+vo2_percent_se <- round(sd(daily_HIF_percent), digits = 2)
+
+vo2_se
+vo2_percent_se
+```
+
+
+The standard deviation of the simulated values is: `vo2_sd` liters. 
+
+The standard deviation of the simulated percentages is: `vo2_percent_se`.
+
 
 # Breathing Frequency Model
 
