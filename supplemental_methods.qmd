@@ -53,6 +53,7 @@ format:
   html:
     embed-resources: true
   typst: default
+toc: true
 editor: source
 ---
 
@@ -92,7 +93,10 @@ HIF_data <- read_xlsx('data/updated_data.xlsx',
          day = factor(interaction(animal, date, drop = TRUE)))
 ```
 
-# Model fitting
+# HIF Model
+
+## Model fitting
+
 
 ```{r}
 HIF_model <- gam(oxygen_cons ~ 
@@ -125,7 +129,7 @@ A prettier model summary table:
 tbl_regression(HIF_model)
 ```
 
-# Model Checking
+## Model Checking
 
 Below are `mgcv` package checks for GAMs, presented mainly to view model convergence and basis dimension checking results.
 
@@ -136,7 +140,7 @@ Below are `mgcv` package checks for GAMs, presented mainly to view model converg
 gam.check(HIF_model)
 ```
 
-## Residual Histogram
+### Residual Histogram
 
 This graph allows us to verify the residual normality condition.
 
@@ -147,7 +151,7 @@ gf_dhistogram(~resid(HIF_model), bins = 15) |>
   gf_fitdistr(dist = "dnorm")
 ```
 
-## Scaled Residual Plot
+### Scaled Residual Plot
 
 The scaled residual plot (Hartig, 2024) allows verification that the mean-variance relationship is as expected, particularly for mixed-effect models and generalized linear models. If all is well, scaled residuals will be trendless and will have uniform spread between 0-1 for all fitted values.
 
@@ -158,7 +162,7 @@ The scaled residual plot (Hartig, 2024) allows verification that the mean-varian
 plotResiduals(simulateResiduals(HIF_model), quantreg = FALSE)
 ```
 
-## Residual ACF Plot
+### Residual ACF Plot
 
 The ACF plot allows us to verify the residual independence condition.
 
@@ -168,9 +172,9 @@ The ACF plot allows us to verify the residual independence condition.
 acf(resid(HIF_model))
 ```
 
-# Model Interpretation
+## Model Interpretation
 
-## Hypothesis Testing
+### Hypothesis Testing
 
 Type II ANOVA allows us to test the null hypothesis of no association with the response, for each predictor (and interaction) included in the model.
 
@@ -178,7 +182,7 @@ Type II ANOVA allows us to test the null hypothesis of no association with the r
 anova(HIF_model)
 ```
 
-## Variance Term Estimation
+### Variance Term Estimation
 
 For random intercept terms, by analogy with the way that mixed-effect model results are usually reported and light of the fact that we wish to control for any individual or spatio-temporal effects rather than performing hypothesis testing for them, it is possible to report the standard variance components associated with each term. These are shown here in units of standard deviation. Note that since we used maximum-likelihood estimation, these estimates may be biased for finite sample size, but since variance term estimation is not the focus of inference (and smooth term hypothesis testing is) this seems like the right choice in our case. 
 
@@ -209,13 +213,13 @@ rename(`Standard Deviation` = std.dev,
 vars
 ```
 
-## Model predictions
+### Model predictions
 
 Another way of visualizing the results of a GAM (or other regression model) is a prediction plot, where you select specific values at which to fix all the predictors other than `exact` time (age, proportion total calories, etc.) and then show predicted oxygen consumption given those values, and varying values of exact. Such a plot might be preferable to a partial plot because the y-axis is in terms of expected response variable values (in total, not a contribution to the whole from one predictor).
 
 We used marginal means of "other" predictors; in this approach quantitative predictors are set to the mean value observed in the data, and for categorical predictors a weighted average across the observed values is used. The idea is to try to show the expected response value for "an average observation" (in some sense) in the actual data. For this reason, it may make the most sense as a set of predictions that can be overlaid on a plot of the data.
 
-### Marginal Means of Model Variables
+#### Marginal Means of Model Variables
 
 ```{r}
 model_vars <- c('exact',
@@ -240,7 +244,7 @@ tbl_summary(
 ```
 
 
-### Model Predictions
+#### Model Predictions
 
 ```{r}
 #| label: marginal-means-preds
@@ -253,11 +257,10 @@ mmeans |>
 ```
 
 
-## Visualization
+### Visualization
 
-### Data Plot with Model Fit
+#### Data Plot with Model Fit
 
-#### Setup
 
 Define colors and shapes to use for plotting
 
@@ -267,7 +270,6 @@ shape_vector <- c("Tt1" = 1, "Tt2" = 2, "Tt3" = 3, "Tt4" = 4,
                   "Tt5" = 5, "Tt6" = 6, "Tt7" = 7, "Tt8" = 8)
 ```
 
-#### Plot
 
 ```{r}
 #| label: data-plus-gam
@@ -301,7 +303,7 @@ oxygen_time_plot <- ggplot(HIF_data,
 print(oxygen_time_plot)
 ```
 
-### Area Under Curve
+#### Area Under Curve
 
 The calculations below show the AUC under the black line in the graph above.
 
@@ -327,6 +329,112 @@ ggplot(predicted_AUC,
 ```
 
 To compute this quantity with uncertainty, we would probably employ a parametric bootstrap (not done yet).
+
+# Breathing Frequency Model
+
+Based on the discussion in the manuscript, I think maybe this is what we need...
+
+Methods would say,
+
+>> We also fitted a normal GAM to quantify the association (if any) between the dependent variable tidal volume and breathing frequency. The model included smooths of breathing frequency as well as time since feeding, energy intake, age, and body mass, plus the categorical predictor sex and random effects of animal ID and day of trial. Settings, including basis type and dimension, were all the same as for the oxygen consumption GAM.
+
+```{r}
+breath_model <- gam(tidal_vol ~ s(Breath_freq, bs = "ts", k = 4) + 
+                      s(exact, bs = "ts", k = 4) + 
+                      s(age, bs = "ts", k = 4) + 
+                      s(body_mass, bs = "ts", k = 4) + 
+                      s(percentdailytotal, k = 4, bs = "ts") + 
+                      # s(pool_temp, k = 4, bs = "ts") +
+                      # sex +
+                      # random effects 
+                      s(animal, bs = "re") + 
+                      s(day, bs = "re"), data = HIF_data)
+```
+
+Standard model summary output from `gam()`:
+
+```{r}
+summary(breath_model)
+```
+
+A prettier model summary table:
+
+```{r}
+tbl_regression(breath_model)
+```
+
+## Model Checking
+
+Below are `mgcv` package checks for GAMs, presented mainly to view model convergence and basis dimension checking results.
+
+```{r}
+#| label: gam-check-breath
+#| fig-show: "hide"
+
+gam.check(breath_model)
+```
+
+### Residual Histogram
+
+This graph allows us to verify the residual normality condition.
+
+```{r}
+#| label: residual-histogram-breath
+
+gf_dhistogram(~resid(breath_model), bins = 15) |> 
+  gf_fitdistr(dist = "dnorm")
+```
+
+### Scaled Residual Plot
+
+The scaled residual plot (Hartig, 2024) allows verification that the mean-variance relationship is as expected, particularly for mixed-effect models and generalized linear models. If all is well, scaled residuals will be trendless and will have uniform spread between 0-1 for all fitted values.
+
+```{r}
+#| label: scaled-resids-breath
+#| message: false
+
+plotResiduals(simulateResiduals(breath_model), quantreg = FALSE)
+```
+
+### Residual ACF Plot
+
+The ACF plot allows us to verify the residual independence condition.
+
+```{r}
+#| label: residual-acf-breath
+
+acf(resid(breath_model))
+```
+
+## Model Interpretation
+
+### Hypothesis Testing
+
+Type II ANOVA allows us to test the null hypothesis of no association with the response, for each predictor (and interaction) included in the model.
+
+```{r}
+anova(breath_model)
+```
+
+The main result here is the p-value for `Breath_freq`, which is very small (6.7e-5). We can interpret this as strong evidence that tidal volume and breathing frequency are associated, (even after controlling for possible effets of time since feeding, age, mass, food amount, temperature, individual and trial day).
+
+### Visualization
+
+Candidate for Figure 3?
+
+```{r}
+gf_point(tidal_vol ~ Breath_freq, data = HIF_data)
+```
+
+
+What the model says (for average of all predictors in the dataset)
+
+```{r}
+predict_response(breath_model, terms = "Breath_freq [all]",
+                 condition = list(exact = 0)) |>
+  plot() 
+```
+
 
 # References
 
