@@ -344,8 +344,6 @@ compute_auc <- function(predicted_smooth, x = mmeans$x){
 }
 ```
 
-Now, we use the function `gratia::simulate()` 
-
 ```{r}
 nsim <- 10000
 set.seed(14)
@@ -386,12 +384,16 @@ daily_HIF_percent <- (daily_HIF / BMR) * 100
 Histogram of simulation results:
 
 ```{r}
+#| label: sim-total-vo2
+
 gf_histogram(~vo2_totals) |>
   gf_labs(x = "Liters Oxygen Consumed (over 133 minutes)",
           y = "Number of Simulations")
 ```
 
 ```{r}
+#| label: sim-total-vo2-percent
+
 gf_histogram(~daily_HIF_percent) |>
   gf_labs(x = "HIF (percent of daily BMR)",
           y = "Number of Simulations")
@@ -507,6 +509,8 @@ The main result here is the p-value for `Breath_freq`, which is very small (6.7e
 Candidate for Figure 3?
 
 ```{r}
+#| label: tidal-vol-vs-breath
+
 gf_point(tidal_vol ~ Breath_freq, data = HIF_data)
 ```
 
@@ -514,6 +518,8 @@ gf_point(tidal_vol ~ Breath_freq, data = HIF_data)
 What the model says (for average of all predictors in the dataset)
 
 ```{r}
+#| label: breath-model-preds
+
 predict_response(breath_model, terms = "Breath_freq [all]",
                  condition = list(exact = 0)) |>
   plot() 
