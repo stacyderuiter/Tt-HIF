@@ -215,15 +215,13 @@ rename(`Standard Deviation` = std.dev,
 vars
 ```
 
-### Model prediction note
+### Model predictions
 
-A of visualizing the results of a GAM (or other regression model) is a prediction plot, where you select specific values at which to fix all the predictors other than `exact` time (age, proportion total calories, etc.) and then show predicted oxygen consumption given those values, and varying values of exact. Such a plot might be preferable to a partial plot because the y-axis is in terms of expected response variable values (in total, not a contribution to the whole from one predictor).
+Another way of visualizing the results of a GAM (or other regression model) is a prediction plot, where you select specific values at which to fix all the predictors other than `exact` time (age, proportion total calories, etc.) and then show predicted oxygen consumption given those values, and varying values of exact. Such a plot might be preferable to a partial plot because the y-axis is in terms of expected response variable values (in total, not a contribution to the whole from one predictor).
 
-We used marginal means of "other" predictors; in this approach quantitative predictors are set to the mean value observed in the data, and for categorical predictors a weighted average across the observed values is used. Random effects terms are not included, so that predictions are population-level (or, equivalently here, predictions for the typical dolphin on the typical day). The idea is to try to show the expected response value for "an average observation" (in some sense) in the actual data. For this reason, it may make the most sense as a set of predictions that can be overlaid on a plot of the data.
+We used marginal means of "other" predictors; in this approach quantitative predictors are set to the mean value observed in the data, and for categorical predictors a weighted average across the observed values is used. The idea is to try to show the expected response value for "an average observation" (in some sense) in the actual data. For this reason, it may make the most sense as a set of predictions that can be overlaid on a plot of the data.
 
-### Marginal Means of Model Variables
-
-We'd like to make model predictions with all predictors except for the time since feeding held constant at their mean values. What are those mean values?
+#### Marginal Means of Model Variables
 
 ```{r}
 model_vars <- c('exact',
@@ -248,8 +246,103 @@ tbl_summary(
 ```
 
 
-### Uncertainty Estimation
-To compute model-predicted oxygen consumption and total oxygen consumption (area under the curve), all with uncertainty, we could employ a resampling-based approach.
+#### Model Predictions
+
+```{r}
+#| label: marginal-means-preds
+
+mmeans <- predict_response(HIF_model, terms = 'exact [0:133]',
+                 margin = 'marginalmeans') 
+
+mmeans |> 
+  plot()
+```
+
+
+### Visualization
+
+#### Data Plot with Model Fit
+
+
+Define colors and shapes to use for plotting
+
+```{r}
+kcal_colors <- c("#E41A1C", "#377EB8", "#4DAF4A", "#984EA3")
+shape_vector <- c("Tt1" = 1, "Tt2" = 2, "Tt3" = 3, "Tt4" = 4, 
+                  "Tt5" = 5, "Tt6" = 6, "Tt7" = 7, "Tt8" = 8)
+```
+
+
+```{r}
+#| label: data-plus-gam
+
+oxygen_time_plot <- ggplot(HIF_data, 
+                           aes(x = exact, y = oxygen_cons)) +
+  geom_point(aes(color = factor(kcal), shape = animal), 
+             size = 1, 
+             stroke = 1.2) +
+  geom_line(data = mmeans,
+            aes(x = x, y = predicted),
+            color = 'black',
+            linewidth = 2) +
+  geom_ribbon(data = mmeans,
+              aes(ymin = conf.low, ymax = conf.high, x = x),
+              inherit.aes = FALSE,
+              fill = 'grey44', alpha = 0.2) +
+  labs(x = "Time (min)", 
+       y = "Oxygen Consumption (L / min)", 
+       color = "Energy Intake (kcal)", 
+       shape = "Animal ID") +
+  scale_color_manual(values = kcal_colors) +
+  scale_shape_manual(values = shape_vector) +
+  theme_minimal() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        axis.line = element_line(linewidth = 1)) +
+  scale_x_continuous(breaks = seq(0, 120, by = 20)) +
+  scale_y_continuous(breaks = seq(0, 2, by = 0.2))
+
+print(oxygen_time_plot)
+```
+
+#### Area Under Curve
+
+The calculations below show the AUC under the black line in the graph above.
+
+For additional reference if needed, the initial value of oxygen consumption at time 0 is: `r mmeans$predicted[mmeans$x == 0]`
+
+To find the cumulative area under the curve, using the marginal mean expected $0_2$ consumption values, we could do something like:
+
+```{r}
+predicted_AUC <- data.frame(minutes = mmeans$x,
+                            AUC = cumtrapz(x = mmeans$x,
+                                           y = mmeans$predicted))
+max(predicted_AUC$AUC)
+```
+
+The total at 133 minutes is: `r max(predicted_AUC$AUC)`. Below the cumulative sums are shown:
+
+```{r}
+#| label: cum-auc
+
+ggplot(predicted_AUC,
+       aes(x = minutes, y = AUC)) +
+  geom_path()
+```
+
+##### Uncertainty Estimation
+To compute this quantity with uncertainty, we could employ a resampling-based approach.
+
+First we need a function that takes a fitted model and from it computes the total AUC for 133 minutes:
+
+```{r}
+compute_auc <- function(predicted_smooth, x = mmeans$x){
+  AUC = cumtrapz(x = x,
+                 y = predicted_smooth)
+  total_AUC <- max(AUC)
+  return(total_AUC)
+}
+```
 
 ```{r}
 nsim <- 10000
@@ -261,16 +354,10 @@ post_params <- gam.mh(HIF_model, ns = nsim*2, burn = 2000, thin = 2)$bs
 # yields matrix with cols = model params and rows = sim #s
 
 # get linear predictor matrix for "mm data"
-mm_const <- HIF_data |> 
-  select(percentdailytotal, 
-         body_mass,
-         age,
-         pool_temp,
-         is_male) |>
-  summarise(across(everything(), function(x) mean(x)))
-
+mm_const <- attr(x = mmeans, which = "constant.values") |> 
+  data.frame()
 mm_df <- expand_grid(mm_const,
-                     exact = seq(from = 0, by = 1, to = 133)) 
+                     exact = unique(mmeans$x)) 
 
 mm_lpmat <- predict(HIF_model,
         newdata = mm_df,
@@ -293,19 +380,6 @@ vo2_predictions <- mm_df |>
          ci_hi = apply(vo2_curve, 
                     MARGIN = 1,
                     FUN = function(x) quantile(x, 0.975)))
-```
-
-```{r}
-compute_auc <- function(predicted_smooth, x = mm_df$exact){
-  AUC = cumtrapz(x = x,
-                 y = predicted_smooth)
-  total_AUC <- max(AUC)
-  return(total_AUC)
-}
-```
-
-
-```{r}
 
 vo2_totals <- apply(vo2_curve, 
                     MARGIN = 2,
@@ -314,7 +388,7 @@ vo2_totals_actual <- compute_auc(vo2_curve_actual)
 
 # as percent, assuming BMR is constant
 BMR <- 1051.2 # L O2 in one day
-BMR_133 <- vo2_curve[mm_df$exact == 0,] * 133
+BMR_133 <- 97.1
 
 HIF_133 <- vo2_totals - BMR_133
 daily_HIF <- HIF_133 / mm_const$percentdailytotal
@@ -340,45 +414,27 @@ gf_histogram(~daily_HIF_percent) |>
           y = "Number of Simulations")
 ```
 
-Calculations of specific values of interest:
+Based on the simulations, the mean HIF during the 133 minutes and also as a percent of the BMR over a full day are *higher* than the estimates based on the data (showing in Figure 1, computed based on the marginal mean model predictions). One reason for the difference may be that the way that individual and day are treated is slightly different in the two cases. By analogy to other resampling/simulation-based approaches the standard errors obtained here could still be appropriate estimates (and better than showing no uncertainty at all).
+
 
 ```{r}
-round(mean(vo2_totals), digits = 2)
-round(mean(daily_HIF_percent), digits = 2)
-
 vo2_se <- round(sd(vo2_totals), digits = 2)
 vo2_percent_se <- round(sd(daily_HIF_percent), digits = 2)
 
 vo2_se
 vo2_percent_se
-
-# at time 0
-mean(vo2_curve[mm_df$exact == 0,] * 133)
-sd(vo2_curve[mm_df$exact == 0,] * 133)
 ```
 
 
-The mean (standard deviation) of the simulated values is: `r round(mean(vo2_totals), digits = 2)` (`r vo2_se`) liters. 
+The standard deviation of the simulated values is: `vo2_sd` liters. 
 
-The mean (standard deviation) of the simulated percentages is: `r round(mean(daily_HIF_percent), digits = 2)` (`r vo2_percent_se`).
-
-For additional reference if needed, the initial value of oxygen consumption at time 0 is: `r round(vo2_predictions$pred[vo2_predictions$exact == 0], digits = 2)` (se `r round(sd(vo2_curve[mm_df$exact == 0,]), digits = 3)`), and so over the whole 133 minutes, `r round(vo2_predictions$pred[vo2_predictions$exact == 0] * 133, digits = 2)` (se `r round(sd(vo2_curve[mm_df$exact == 0,] * 133), digits = 2)`)
-
-#### Data Plot with Model Fit
-
-Define colors and shapes to use for plotting
-
-```{r}
-kcal_colors <- c("#E41A1C", "#377EB8", "#4DAF4A", "#984EA3")
-shape_vector <- c("Tt1" = 1, "Tt2" = 2, "Tt3" = 3, "Tt4" = 4, 
-                  "Tt5" = 5, "Tt6" = 6, "Tt7" = 7, "Tt8" = 8)
-```
+The standard deviation of the simulated percentages is: `vo2_percent_se`.
 
 
 ```{r}
-#| label: data-plus-gam
+#| label: data-plus-gam2
 
-oxygen_time_plot <- ggplot(HIF_data, 
+oxygen_time_plot2 <- ggplot(HIF_data, 
                            aes(x = exact, y = oxygen_cons)) +
   geom_point(aes(color = factor(kcal), shape = animal), 
              size = 1, 
@@ -386,7 +442,7 @@ oxygen_time_plot <- ggplot(HIF_data,
   geom_line(data = vo2_predictions,
             aes(x = exact, y = pred),
             color = 'black',
-            linewidth = 1) +
+            linewidth = 1.5) +
   geom_ribbon(data = vo2_predictions,
               aes(ymin = ci_low, ymax = ci_hi, x = exact),
               inherit.aes = FALSE,
@@ -404,7 +460,7 @@ oxygen_time_plot <- ggplot(HIF_data,
   scale_x_continuous(breaks = seq(0, 120, by = 20)) +
   scale_y_continuous(breaks = seq(0, 2, by = 0.2))
 
-print(oxygen_time_plot)
+print(oxygen_time_plot2)
 ```
 
 # Breathing Frequency Model
