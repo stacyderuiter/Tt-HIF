@@ -258,7 +258,7 @@ tbl_summary(
 ```
 
 
-### Uncertainty Estimation
+### Predictions with uncertainty
 To compute model-predicted oxygen consumption and total oxygen consumption (area under the curve), all with uncertainty, we can employ a resampling-based approach.
 
 We use `mgcv::gam.mh()` to draw samples of model parameter values via Metropolis-Hastings sampling from the posterior.
@@ -329,12 +329,13 @@ vo2_totals <- apply(vo2_curve,
 vo2_totals_actual <- compute_auc(vo2_curve_actual)
 
 # as percent, assuming BMR is constant
-BMR <- 1051.2 # L O2 in one day
 BMR_133 <- vo2_curve[mm_df$exact == 0,] * 133
+BMR_daily <- BMR_133 * (24 * 60 / 133)
+# 1051.2 # L O2 in one day
 
 HIF_133 <- vo2_totals - BMR_133
 daily_HIF <- HIF_133 / mm_const$percentdailytotal
-daily_HIF_percent <- (daily_HIF / BMR) * 100
+daily_HIF_percent <- (daily_HIF / BMR_daily) * 100
 
 ```
 
@@ -358,16 +359,48 @@ gf_histogram(~daily_HIF_percent) |>
 
 Calculations of specific values of interest:
 
-```{r}
-round(mean(vo2_totals), digits = 2)
-round(mean(daily_HIF_percent), digits = 2)
+oxygen consumption over the 133 minutes:
 
+```{r}
+vo2_mean <- round(mean(vo2_totals), digits = 2)
 vo2_se <- round(sd(vo2_totals), digits = 2)
+
+vo2_mean
+vo2_se
+```
+
+daily HIF total:
+
+```{r}
+HIF_daily <- round(mean(daily_HIF), digits = 2)
+HIF_daily_se <- round(sd(daily_HIF), digits = 2)
+HIF_daily
+HIF_daily_se
+```
+
+daily HIF as percent:
+
+```{r}
+vo2_percent_mean <- round(mean(daily_HIF_percent), digits = 2)
 vo2_percent_se <- round(sd(daily_HIF_percent), digits = 2)
 
-vo2_se
+vo2_percent_mean
 vo2_percent_se
+```
 
+BMR over 24h:
+
+```{r}
+BMR_daily_mean <- round(mean(BMR_daily), digits = 2)
+BMR_daily_se <- round(sd(BMR_daily), digits = 2)
+BMR_daily_mean
+BMR_daily_se
+```
+
+
+over 133 minutes, using the BMR at time 0:
+
+```{r}
 # at time 0
 mean(vo2_curve[mm_df$exact == 0,] * 133)
 sd(vo2_curve[mm_df$exact == 0,] * 133)
