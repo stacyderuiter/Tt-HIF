@@ -80,7 +80,7 @@ knitr::opts_chunk$set(echo = TRUE,
                       fig.height = 4.5,
                       fig.path = "figures/HIF-",
                       dpi = 300,                     
-                      dev = c("CairoJPEG", "pdf")
+                      dev = c("CairoJPEG", "cairo_pdf")
                       )
 
 theme_set(theme_minimal(base_size = 12))
@@ -456,6 +456,16 @@ oxygen_time_plot <- ggplot(HIF_data,
   scale_y_continuous(breaks = seq(0, 2, by = 0.2))
 
 print(oxygen_time_plot)
+```
+
+```{r}
+ragg::agg_tiff("figures/figure-1.tiff", 
+               width = 6, 
+               height = 4.5, 
+               units = "in", 
+               res = 300)
+oxygen_time_plot
+dev.off()
 ```
 
 # References
