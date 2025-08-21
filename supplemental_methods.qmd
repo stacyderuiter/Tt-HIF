@@ -54,6 +54,20 @@ format:
     embed-resources: true
   typst: default
 toc: true
+crossref:
+  custom:
+    - kind: float
+      key: suppfig
+      latex-env: suppfig
+      reference-prefix: Figure S
+      space-before-numbering: false
+      latex-list-of-description: Supplementary Figure
+    - kind: float
+      key: supptab
+      latex-env: supptab
+      reference-prefix: Table S
+      space-before-numbering: false
+      latex-list-of-description: Supplementary Table
 fig-dpi: 300
 editor: source
 ---
@@ -133,18 +147,22 @@ Standard model summary output from `gam()`:
 summary(HIF_model)
 ```
 
-A prettier model summary table:
+Below is the model summary table:
+
+::: {#supptab-demo-plot}
 
 ```{r}
 tbl_regression(HIF_model)
 ```
+
+GAMM Model summary table.
+:::
 
 ## Model Checking
 
 Below are `mgcv` package checks for GAMs, presented mainly to view model convergence and basis dimension checking results.
 
 ```{r}
-#| label: gam-check
 #| fig-show: "hide"
 
 gam.check(HIF_model)
@@ -154,33 +172,50 @@ gam.check(HIF_model)
 
 This graph allows us to verify the residual normality condition.
 
+::: {#suppfig-resid-hist}
+
 ```{r}
-#| label: residual-histogram
+#| label: suppfig-resid-hist
 
 gf_dhistogram(~resid(HIF_model), bins = 15) |> 
-  gf_fitdistr(dist = "dnorm")
+  gf_fitdistr(dist = "dnorm") |>
+  gf_labs(x = "GAMM Residuals",
+          y = "Density")
 ```
+
+Residual histogram.
+:::
 
 ### Scaled Residual Plot
 
 The scaled residual plot (Hartig, 2024) allows verification that the mean-variance relationship is as expected, particularly for mixed-effect models and generalized linear models. If all is well, scaled residuals will be trendless and will have uniform spread between 0-1 for all fitted values.
 
+::: {#suppfig-scaled-resids}
+
 ```{r}
-#| label: scaled-resids
+#| label: suppfig-scaled-resids
 #| message: false
 
 plotResiduals(simulateResiduals(HIF_model), quantreg = FALSE)
 ```
 
+GAMM scaled residual plot
+:::
+
 ### Residual ACF Plot
 
 The ACF plot allows us to verify the residual independence condition.
 
-```{r}
-#| label: residual-acf
+::: {#suppfig-acf}
 
-acf(resid(HIF_model))
+```{r}
+#| label: suppfig-acf
+
+acf(resid(HIF_model), main = "")
 ```
+
+GAMM Residual ACF plot.
+:::
 
 ## Model Interpretation
 
@@ -188,9 +223,22 @@ acf(resid(HIF_model))
 
 Type II ANOVA allows us to test the null hypothesis of no association with the response, for each predictor (and interaction) included in the model.
 
+::: {#supptab-anova}
+
 ```{r}
-anova(HIF_model)
+my_atab <- anova(HIF_model)$s.table
+terms <- rownames(my_atab)
+tibble(Term = terms,
+       EDF = my_atab[,"edf"],
+       `Reference DF` = my_atab[,"Ref.df"],
+       F = my_atab[,"F"],
+       `p-value` = my_atab[,"p-value"]
+       ) |>
+  gt()
 ```
+
+ANOVA table for GAMM.
+:::
 
 ### Variance Term Estimation
 
@@ -219,9 +267,14 @@ rename(`Standard Deviation` = std.dev,
   gt()
 ```
 
+::: {#supptab-variance}
+
 ```{r}
 vars
 ```
+
+Variance components associated with each term in the GAMM.
+:::
 
 ### Model prediction note
 
@@ -236,6 +289,8 @@ The idea is to try to show the expected response value for "an average observati
 ### Marginal Means of Model Variables
 
 We'd like to make model predictions with all predictors except for the time since feeding held constant at their mean values. What are those mean values?
+
+::: {#supptab-marginal-means}
 
 ```{r}
 model_vars <- c('exact',
@@ -259,6 +314,9 @@ tbl_summary(
   )
 ```
 
+Marginal means of data variables.
+:::
+
 
 ### Predictions with uncertainty
 To compute model-predicted oxygen consumption and total oxygen consumption (area under the curve), all with uncertainty, we can employ a resampling-based approach.
@@ -270,6 +328,10 @@ We obtain a linear-predictor matrix from the fitted model, which when post-multi
 By generating these predictions for many parameter samples, we can obtain model predictions and derived quantities with uncertainty (here, percentile-based confidence intervals and standard errors are computed).
 
 ```{r}
+#| results: hide
+#| warning: false
+#| message: false
+
 nsim <- 10000
 set.seed(14)
 
@@ -343,21 +405,33 @@ daily_HIF_percent <- (daily_HIF / BMR_daily) * 100
 
 Histogram of simulation results:
 
+::: {#suppfig-sim-total-vo2}
+
 ```{r}
-#| label: sim-total-vo2
+#| label: suppfig-sim-total-vo2
 
 gf_histogram(~vo2_totals) |>
   gf_labs(x = "Liters Oxygen Consumed (over 133 minutes)",
           y = "Number of Simulations")
 ```
 
+Expected liters of oxygen consumed according to simulations.
+:::
+
+::: {#suppfig-vo2-total}
+
 ```{r}
-#| label: sim-total-vo2-percent
+#| label: suppfig-vo2-total
 
 gf_histogram(~daily_HIF_percent) |>
   gf_labs(x = "HIF (percent of daily BMR)",
           y = "Number of Simulations")
 ```
+
+Expected HIF as a percent of daily BMR, according to simulations.
+:::
+
+
 
 Calculations of specific values of interest:
 
@@ -426,8 +500,10 @@ shape_vector <- c("Tt1" = 1, "Tt2" = 2, "Tt3" = 3, "Tt4" = 4,
 ```
 
 
+::: {#suppfig-main-fig-1}
+
 ```{r}
-#| label: data-plus-gam
+#| label: suppfig-main-fig-1
 
 oxygen_time_plot <- ggplot(HIF_data, 
                            aes(x = exact, y = oxygen_cons)) +
@@ -457,6 +533,9 @@ oxygen_time_plot <- ggplot(HIF_data,
 
 print(oxygen_time_plot)
 ```
+
+This repeats the data-and-model figure from the main manuscript (to show code).
+:::
 
 ```{r}
 ragg::agg_tiff("figures/figure-1.tiff", 
