@@ -87,6 +87,7 @@ library(pracma)
 library(DHARMa)
 library(gt)
 library(gtsummary)
+# remotes::install_github("m-clark/mixedup")
 library(mixedup)
 
 knitr::opts_chunk$set(echo = TRUE,
@@ -106,12 +107,70 @@ theme_set(theme_minimal(base_size = 12))
 HIF_data <- read_xlsx('data/updated_data.xlsx',
                       .name_repair = 'unique_quiet') |>
   mutate(animal = factor(animal),
+         animal2 = fct_reorder(animal, kcal, min),
          day = factor(interaction(animal, date, drop = TRUE)),
          # numeric version of binary sex variable 
          # (this doesn't change model parameter estimates but
          # eases later predictions from fitted model)
          is_male = if_else(sex == "M", 1,0))
 ```
+
+# Data by Individual
+
+```{r}
+kcal_colors <- c("#E41A1C", "#377EB8", "#4DAF4A", "#984EA3")
+shape_vector <- c("Tt1" = 1, "Tt2" = 2, "Tt3" = 3, "Tt4" = 4, 
+                  "Tt5" = 5, "Tt6" = 6, "Tt7" = 7, "Tt8" = 8)
+```
+
+
+::: {#suppfig-data-by-ind}
+
+```{r}
+#| label: data-by-individual
+#| fig-width: 7.5
+#| fig-height: 11
+
+HIF_ave <- HIF_data |> 
+  group_by(animal2, time, kcal) |>
+  summarise(oxygen_cons = mean(oxygen_cons, na.rm = TRUE),
+            exact = mean(exact, na.rm = TRUE),
+            .groups = "drop")
+
+oxygen_time_ind_plot <- 
+  ggplot(HIF_data, 
+         aes(x = exact, y = oxygen_cons)) +
+  geom_point(aes(
+    color = factor(kcal), 
+    shape = animal2), 
+    size = 1, 
+    # color = "grey64",
+    stroke = 1.2,
+    alpha = 0.3
+    ) +
+  scale_shape_manual(values = shape_vector) +
+  facet_wrap("animal2", ncol = 2) +
+  geom_point(aes(x = exact, y = oxygen_cons, color = factor(kcal)),
+             data = HIF_ave) +
+  geom_line(aes(x = exact, y = oxygen_cons, color = factor(kcal)),
+            data = HIF_ave) +
+  labs(x = "Time (min)", 
+       y = "Oxygen Consumption (L / min)", 
+       color = "Energy Intake (kcal)",
+       shape = "Animal ID") +
+  scale_color_manual(values = kcal_colors) +
+  theme_minimal() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        axis.line = element_line(linewidth = 1)) +
+  scale_x_continuous(breaks = seq(0, 120, by = 20)) +
+  scale_y_continuous(breaks = seq(0, 2, by = 0.2))
+
+print(oxygen_time_ind_plot)
+```
+
+Oxygen consumption as a function of time, by individual dolphin. Colors indicate energy intake in kcal. At each timepoint, varying symbols for each dolphin plot individual replicate measurements, while dots plot means at each timepoint. Nominal timepoints were 0, 30, 60, and 120 minutes, but observations are plotted at the exact time they were actually taken (or, for means, the average of those exact times). 
+:::
 
 # HIF Model
 
