@@ -1,5 +1,5 @@
 ---
-title: "Supplemental Materials for: Heat increment of feeding in the common bottlenose dolphin (*Tursiops truncatus*) is a minor quantity in estimating field metabolic rate"
+title: "Supplemental Materials for: Heat increment of feeding in the common bottlenose dolphin (*Tursiops truncatus*) contributes moderately to field metabolic rate estimates"
 author:
   - name: I. Koliopoulou
     affiliations:
@@ -26,7 +26,7 @@ author:
       - ref: GDR      
 affiliations:
   - id: LU
-    name: Linkoping University
+    name: IFM, Linkoping University
     city: Linkoping
     state: Sweden
   - id: Calvin
@@ -42,7 +42,7 @@ affiliations:
     city: Valencia
     state: Spain
   - id: UBC
-    name: Univeristy of British Columbia
+    name: Department of Zoology, Univeristy of British Columbia
     city: Vancouver
     state: British Columbia Canada
   - id: GDR
@@ -95,7 +95,9 @@ knitr::opts_chunk$set(echo = TRUE,
                       fig.height = 4.5,
                       fig.path = "figures/HIF-",
                       dpi = 300,                     
-                      dev = c("CairoJPEG", "cairo_pdf")
+                      dev = c("CairoJPEG", "cairo_pdf"),
+                      warning = FALSE,
+                      message = FALSE
                       )
 
 theme_set(theme_minimal(base_size = 12))
@@ -123,14 +125,7 @@ shape_vector <- c("Tt1" = 1, "Tt2" = 2, "Tt3" = 3, "Tt4" = 4,
                   "Tt5" = 5, "Tt6" = 6, "Tt7" = 7, "Tt8" = 8)
 ```
 
-
-::: {#suppfig-data-by-ind}
-
 ```{r}
-#| label: data-by-individual
-#| fig-width: 7.5
-#| fig-height: 11
-
 HIF_ave <- HIF_data |> 
   group_by(animal2, time, kcal) |>
   summarise(oxygen_cons = mean(oxygen_cons, na.rm = TRUE),
@@ -165,6 +160,15 @@ oxygen_time_ind_plot <-
         axis.line = element_line(linewidth = 1)) +
   scale_x_continuous(breaks = seq(0, 120, by = 20)) +
   scale_y_continuous(breaks = seq(0, 2, by = 0.2))
+```
+
+\newpage
+::: {#suppfig-data-by-ind}
+
+```{r}
+#| label: data-by-individual
+#| fig-width: 7.5
+#| fig-height: 9.5
 
 print(oxygen_time_ind_plot)
 ```
